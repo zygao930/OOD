@@ -1,7 +1,5 @@
 # Do Perturbation Predictors Learn Transferable Gene Interactions?
 
-Code for reproducing the experiments in *"Do Perturbation Predictors Learn Transferable Gene Interactions? Diagnosing Extrapolation Failures in Agentic Screening"*.
-
 ## Repository structure
 
 ```
