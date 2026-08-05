@@ -1,28 +1,3 @@
-"""
-Norman compositional OOD: prediction baselines and reliability analysis.
-
-Produces:
-    Table 1 (Norman columns): MAE, Top20 MAE, Wins/Add. for all 8 models
-    Table 2: Nine reliability signals for GEARS
-    Table 9: Selective prediction under abstention (Appendix C)
-    Table 10: Interaction correction analysis across models
-
-Models: Additive, Ridge, MLP, Transformer, CPA, scGPT, GEARS+scGPT, GEARS
-Signals: AD, PM, GV, Ensemble, kNN, Mahalanobis, NN error, Cosine, Random
-
-Usage:
-    # Run all seeds sequentially
-    CUDA_VISIBLE_DEVICES=0 python run_norman_baselines.py
-
-    # Run one seed per GPU
-    CUDA_VISIBLE_DEVICES=0 python run_norman_baselines.py --seed 42
-    CUDA_VISIBLE_DEVICES=1 python run_norman_baselines.py --seed 43
-    CUDA_VISIBLE_DEVICES=2 python run_norman_baselines.py --seed 44
-
-    # Merge per-seed record files after all jobs finish
-    python run_norman_baselines.py --merge-only
-"""
-
 import os
 import json
 import pickle
@@ -167,9 +142,6 @@ if os.path.exists(os.path.join(SCGPT_DIR, "vocab.json")):
             mapped += 1
     print(f"  Mapped {mapped}/{n_pert_genes} genes")
 
-    # Also build embeddings for ALL output genes, so GEARS+scGPT can inject
-    # pretrained embeddings into every output-gene position (matching the
-    # original run_scgpt_norman.py), not just the perturbation genes.
     scgpt_embs_out = np.zeros((n_genes_out, pretrained_emb.shape[1]), dtype=np.float32)
     mapped_out = 0
     for i, gn in enumerate(gene_names):
@@ -411,7 +383,6 @@ for seed in SEEDS:
     if scgpt_embs is not None:
         from sklearn.decomposition import PCA
         gs_dir = f"results/norman/gears_scgpt_seed{seed}"
-        # Initialize GEARS with scGPT embeddings projected via PCA
         pert_data.prepare_split(split="custom", seed=1, split_dict_path=split_path)
         pert_data.get_dataloader(batch_size=64, test_batch_size=256)
         gs_model = GEARS(pert_data, device=device)
@@ -420,10 +391,6 @@ for seed in SEEDS:
             gs_model.load_pretrained(gs_dir)
         else:
             gs_model.model_initialize(hidden_size=64)
-            # Inject scGPT embeddings for ALL output genes (matching the
-            # original run_scgpt_norman.py): PCA the full output-gene
-            # embedding matrix to the GEARS embedding width, then copy into
-            # each output-gene position of gene_emb.
             gears_net = gs_model.model
             model_emb_dim = gears_net.gene_emb.weight.shape[1]
             if scgpt_embs_out.shape[1] != model_emb_dim:
@@ -481,10 +448,7 @@ for seed in SEEDS:
         n_neighbors=min(3, len(train_embs_arr)), metric="cosine"
     ).fit(train_embs_arr)
 
-    # ----- Per-model embedding kNN structures (Table 4 routing) -----
-    # Each learned model gets its own embedding space, matching the original
-    # (Transformer/CPA/scGPT/MLP embedding kNN) rather than reusing the GEARS
-    # embedding for every model.
+
     def _torch_embed(model, pname):
         genes = pair_genes(pname)
         if not all(g in pert_gene2idx for g in genes):
@@ -508,7 +472,6 @@ for seed in SEEDS:
                 out = model.transformer(comb, src_key_padding_mask=pad)
                 mf = (~pad).unsqueeze(-1).float()
                 return ((out * mf).sum(1) / mf.sum(1).clamp(min=1)).cpu().numpy().flatten()
-            # MLP: mean-pooled embedding
             embs = model.emb(t)
             mask = (gi >= 0).unsqueeze(-1).float()
             return (embs * mask).sum(1).cpu().numpy().flatten()
@@ -529,8 +492,6 @@ for seed in SEEDS:
             per_model_nn[mkey] = (mdl, NearestNeighbors(
                 n_neighbors=min(5, len(arr)), metric="cosine").fit(arr))
 
-    # GEARS+scGPT gets its OWN gene-embedding kNN (not the standard GEARS one),
-    # matching the original which reads the trained gs_model's gene_emb.
     gs_pair_emb = None
     gs_nn = None
     if predict_gears_scgpt is not None:
@@ -583,7 +544,6 @@ for seed in SEEDS:
             "interaction_magnitude": float(np.mean(np.abs(true_eff - add_pred))),
         }
 
-        # Prediction errors and top20
         predictors = [
             ("additive", add_pred),
             ("ridge", ridge_pred),
@@ -603,7 +563,6 @@ for seed in SEEDS:
                 record[f"pm_{name}"] = float(np.mean(np.abs(pred)))
                 record[f"gv_{name}"] = float(np.var(pred))
 
-        # Embedding-based signals (GEARS embedding for the shared kNN/Mahal)
         emb = pert_embedding_gears(p)
         if emb is not None:
             record["knn_dist"] = float(nn_model.kneighbors(emb.reshape(1, -1))[0].mean())
@@ -793,7 +752,6 @@ for name, key in model_keys:
 ###############################################################################
 
 if args.seed is None:
-    # Sequential all-seed run: canonical combined output is safe to write directly.
     all_records.sort(key=lambda r: (int(r.get("seed", -1)), str(r.get("pair", ""))))
     with open("results/norman/all_records.json", "w") as f:
         json.dump(all_records, f, indent=2)

@@ -1,21 +1,3 @@
-"""
-Adamson single-gene OOD evaluation (Table 3 Adamson rows).
-
-Evaluates reliability signals under standard single-gene OOD, where the
-perturbed gene itself is absent from training. The split holds out 20% of
-genes for test and a disjoint 10% for validation per seed; across the three
-seeds this gives the paper's 48 single-gene held-out evaluations in
-aggregate (not 48 per seed), and validation never overlaps training.
-
-AD is undefined in this single-gene setting; PM, GV, ensemble variance,
-kNN, Mahalanobis, cosine-to-nearest, and NN-error-proxy are all evaluated.
-
-Models: GEARS, MLP, Transformer, CPA, scGPT
-
-Usage:
-    CUDA_VISIBLE_DEVICES=0 python run_adamson.py
-"""
-
 import os
 import json
 import pickle
@@ -135,8 +117,6 @@ all_genes = sorted(set(g for c in all_effects for g in pair_genes(c)))
 pg2idx = {g: i for i, g in enumerate(all_genes)}
 n_pg = len(all_genes)
 
-# Full output-gene index (GEARS gene_emb is indexed by the full gene list,
-# not the perturbation-gene subset).
 gene_names_full = (
     list(adata.var["gene_name"]) if "gene_name" in adata.var.columns
     else list(adata.var_names)
@@ -204,8 +184,8 @@ else:
 from scipy.spatial.distance import cdist
 from sklearn.covariance import EmpiricalCovariance
 
-N_MC_SAMPLES = 20       # MC dropout passes for ensemble variance
-N_NEIGHBORS = 5         # kNN / cosine / NN error proxy
+N_MC_SAMPLES = 20       
+N_NEIGHBORS = 5         
 
 
 def embed_mlp(model, gi):
@@ -287,7 +267,7 @@ def compute_ensemble_variance(mc_preds):
 def mc_dropout_preds(model, gi, n=N_MC_SAMPLES):
     """Run n stochastic forward passes with dropout enabled."""
     was_training = model.training
-    model.train()  # enable dropout
+    model.train() 
     preds = []
     with torch.no_grad():
         for _ in range(n):
@@ -339,9 +319,6 @@ for seed in requested_seeds:
 
     train_conds = split["train"]
     test_conds = split["test"]
-    # Use the dedicated, disjoint validation conditions created in
-    # prepare_data.py. These never overlap with training, unlike the
-    # previous train_conds[-20:] slice.
     val_conds = split.get("val", [])
     held_out_genes = set(split.get("test_genes", split.get("held_out_genes", [])))
 
@@ -350,7 +327,6 @@ for seed in requested_seeds:
 
     train_ds = PertDS(train_conds, all_effects, pg2idx)
     val_ds = PertDS(val_conds, all_effects, pg2idx)
-    # Fallback only if the split lacks a val set (older split files).
     if len(val_ds) == 0:
         val_ds = PertDS(train_conds[-20:], all_effects, pg2idx)
 
@@ -406,8 +382,6 @@ for seed in requested_seeds:
             scgpt_model.load_state_dict(bs)
         scgpt_model.eval()
 
-    # GEARS split: use the dedicated validation conditions (train_conds
-    # already contains "ctrl", so it is not added again).
     gears_split = {"train": train_conds, "val": val_conds, "test": test_conds}
     tmp_path = f"/tmp/adamson_gears_seed{seed}.pkl"
     with open(tmp_path, "wb") as f:
@@ -424,7 +398,6 @@ for seed in requested_seeds:
         gears_model.train(epochs=15, lr=1e-3)
         gears_model.save_model(gears_dir)
 
-    # Build per-model training-embedding structures for reliability signals.
     print("  Building reliability structures (kNN/Mahalanobis/NN-error)...")
     train_structs = {}
     for mkey, efn, mdl in [
@@ -454,8 +427,6 @@ for seed in requested_seeds:
                 if g in gene2idx_full and gene2idx_full[g] < gears_gene_emb.shape[0]]
         return np.mean(embs, axis=0) if embs else None
 
-    # Compute GEARS prediction error for each training condition, so the NN
-    # error proxy uses real neighbor errors (not zeros). Matches the original.
     print("  Computing GEARS training errors for NN error proxy...")
     gears_train_errors = {}
     for c in train_conds:
@@ -563,8 +534,6 @@ for seed in requested_seeds:
                 if len(gears_train_errs) > 0:
                     record["nn_error_proxy_gears"] = compute_nn_error_proxy(
                         g_emb, gears_train_embs, gears_train_errs)
-            # GEARS ensemble variance requires MC dropout inside GEARS internals;
-            # left as NaN to match the original's handling.
             record["ensemble_var_gears"] = float("nan")
         except Exception:
             pass
@@ -573,8 +542,6 @@ for seed in requested_seeds:
 
     print(f"  Records: {sum(1 for r in all_records if r['seed'] == seed)}")
 
-    # Save after every completed seed. If interrupted mid-seed, only that seed
-    # is rerun; completed seeds are skipped on restart.
     with open(output_path, "w") as f:
         json.dump(all_records, f, indent=2)
     print(f"  Checkpoint saved: {output_path}")

@@ -1,17 +1,3 @@
-"""
-Gene-level failure analysis (Section 3.3, Figure 3 data, Table 6).
-
-Decomposes pair-level predictions into per-gene interaction corrections
-to identify where GEARS's corrections go wrong.
-
-Outputs:
-    results/gene_level/gene_level_results.json
-    results/gene_level/pair_comparison.json   (Figure 3 data)
-
-Usage:
-    CUDA_VISIBLE_DEVICES=0 python run_gene_level_analysis.py
-"""
-
 import os
 import json
 import pickle
@@ -98,10 +84,6 @@ gene_names = (
 # Co-expression node degree (from the GEARS co-expression graph)
 ###############################################################################
 
-# Match the original order: prepare the split and dataloaders and load the
-# GEARS model FIRST, which is what populates pert_data.gene_sim_network, then
-# read node degrees from that graph. Only if the real graph is genuinely
-# absent do we fall back to a data-derived cosine graph, and we say so loudly.
 coexpress_degree = np.zeros(n_genes_out)
 
 _seed42_split = "results/splits/norman_seed42.pkl"
@@ -167,9 +149,8 @@ if coexpress_degree.max() == 0:
 ###############################################################################
 
 pair_data = []
-pair_gene_data = []                        # per-pair Top20-vs-rest statistics
-gene_corrections = defaultdict(list)       # per-gene accumulation across pairs
-# Per-gene running sums for the gene-level correction-vs-error correlation.
+pair_gene_data = []                       
+gene_corrections = defaultdict(list)       
 gene_corr_sum = np.zeros(n_genes_out)
 gene_err_sum = np.zeros(n_genes_out)
 gene_count = np.zeros(n_genes_out)
@@ -206,7 +187,6 @@ for seed in SEEDS:
 
         true_eff = all_pair_effects[p]
         add_pred = single_effects[genes[0]] + single_effects[genes[1]]
-        # Top-20 DE genes are recomputed PER PAIR from this pair's true effect.
         top20 = np.argsort(np.abs(true_eff))[-20:]
         rest_idx = np.delete(np.arange(len(true_eff)), top20)
 
@@ -216,17 +196,13 @@ for seed in SEEDS:
         except Exception:
             continue
 
-        # Per-gene interaction correction and prediction error for THIS pair.
         interaction_correction = np.abs(gears_pred - add_pred)
         pred_error = np.abs(gears_pred - true_eff)
         additive_error = np.abs(add_pred - true_eff)
-
-        # Accumulate per-gene sums across all pairs (gene-level correlation).
         gene_corr_sum += interaction_correction
         gene_err_sum += pred_error
         gene_count += 1
 
-        # Store lightweight per-gene entries with this pair's Top20 status.
         for g_idx in range(n_genes_out):
             gene_corrections[g_idx].append({
                 "correction": float(gears_pred[g_idx] - add_pred[g_idx]),
@@ -234,7 +210,6 @@ for seed in SEEDS:
                 "is_top20": bool(g_idx in top20),
             })
 
-        # Per-pair Top20-vs-rest statistics (drives the 9.8x ratio, rho, wins).
         pair_gene_data.append({
             "pair": p, "seed": seed,
             "mean_correction_top20": float(np.mean(interaction_correction[top20])),
@@ -247,7 +222,6 @@ for seed in SEEDS:
             "pair_error": float(np.mean(pred_error)),
         })
 
-        # Store pair-level comparison
         gears_mae = float(np.mean(np.abs(gears_pred - true_eff)))
         add_mae = float(np.mean(np.abs(add_pred - true_eff)))
         gears_top20 = float(np.mean(np.abs(gears_pred[top20] - true_eff[top20])))
@@ -273,7 +247,7 @@ print("\n" + "=" * 60)
 print("GENE-LEVEL ANALYSIS (Section 3.3)")
 print("=" * 60)
 
-# Per-pair Top-20 vs rest correction ratio, correlation, and wins.
+
 mean_corr_top20 = mean_corr_other = ratio = None
 corr_t20 = corr_rest = None
 gears_wins_t20 = gears_wins_rest = None
@@ -308,7 +282,6 @@ if pair_gene_data:
     print(f"  GEARS beats additive (rest):   {gears_wins_rest}/{n_pairs_pg} "
           f"({100 * gears_wins_rest / n_pairs_pg:.1f}%)")
 
-# Gene-level correction vs error correlation (accumulated across all pairs).
 rho = None
 valid = gene_count > 0
 if valid.sum() > 0:
@@ -319,7 +292,6 @@ if valid.sum() > 0:
     rho = stats.spearmanr(gene_corr_mean[valid], gene_err_mean[valid])[0]
     print(f"\n  Gene-level Spearman(correction, error): rho = {rho:.3f}")
 
-# Co-expression node degree vs correction and error (mechanistic analysis).
 rho_degree_correction = rho_degree_error = None
 if valid.sum() > 0 and coexpress_degree.max() > 0:
     deg_v = coexpress_degree[valid]
@@ -330,7 +302,6 @@ if valid.sum() > 0 and coexpress_degree.max() > 0:
     print(f"  Spearman(co-expr degree, correction): rho = {rho_degree_correction:.3f}")
     print(f"  Spearman(co-expr degree, error):      rho = {rho_degree_error:.3f}")
 
-    # Degree-binned means (quartiles), matching the original's summary table.
     print(f"\n  {'Degree bin':>15s} {'Mean correction':>18s} {'Mean error':>15s} {'N':>8s}")
     pct = [0, 25, 50, 75, 100]
     for i in range(len(pct) - 1):
@@ -343,7 +314,6 @@ if valid.sum() > 0 and coexpress_degree.max() > 0:
                   f"{np.mean(corr_v[mask_bin]):>18.6f} "
                   f"{np.mean(err_v[mask_bin]):>15.6f} {int(mask_bin.sum()):>8d}")
 
-# Pair-level: GEARS vs additive on Top-20 DE genes
 n_improves = n_total = None
 if pair_data:
     n_improves = sum(1 for p in pair_data if p["gears_improves"])
@@ -352,7 +322,6 @@ if pair_data:
           f"({100 * n_improves / n_total:.0f}%) of test pairs")
 
 
-# Table 6: failure cases
 print("\n  Representative failure cases (Table 6):")
 sorted_pairs = sorted(pair_data, key=lambda p: p["gears_mae"], reverse=True)
 print(f"\n  {'Pair':<25} {'GEARS':>8} {'Add.':>8} {'AD':>8}")

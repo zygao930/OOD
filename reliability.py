@@ -1,21 +1,3 @@
-"""
-Reliability signal computation and evaluation.
-
-Implements all nine reliability signals from Table 8:
-    additive_disagreement   ||f(A,B) - (dA + dB)||_1
-    prediction_magnitude    ||f(A,B)||_1
-    genewise_variance       Var_g[f(A,B)_g]
-    ensemble_variance       Mean_g Var_seed[f(A,B)_g] over 3 seeds
-    knn_distance            Mean cosine distance to 5 nearest training pairs
-    mahalanobis_distance    Mahalanobis distance in embedding space
-    nn_error_proxy          Prediction error of nearest training pair
-    cosine_to_nearest       1 - cos(pred, nearest training pred)
-    random                  Uniform [0,1]
-
-Also provides evaluation functions for failure detection AUROC,
-Spearman correlation with error, and selective abstention.
-"""
-
 import numpy as np
 from scipy import stats
 from scipy.spatial.distance import mahalanobis

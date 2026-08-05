@@ -1,25 +1,3 @@
-"""
-Joung-Zhang 2023 leave-one-out cross-validation (Table 1, Table 3 Joung-Zhang rows).
-
-Evaluates all models on the JoungZhang2023 combinatorial dataset using
-leave-one-out CV. Each double perturbation is held out once and the model
-is retrained on the remaining data.
-
-GFP is treated as a control/filler component: GFP+GENE is a single
-perturbation, GENE1+GENE2 (no GFP) is a double, and the baseline is the
-pure GFP control (or the mean of all GFP+GENE cells if none exists). This
-yields the 44 leave-one-out evaluations reported in the paper.
-
-For each model, records AD, PM, GV and a model-specific kNN distance so
-Table 3 (AD, PM, GV, kNN, kNN-Abs20) and Table 4 kNN routing can be built.
-
-Models: Ridge, MLP, Transformer, CPA, scGPT, GEARS, GEARS+scGPT
-
-Usage:
-    CUDA_VISIBLE_DEVICES=0 python run_joungzhang.py --fold-start 0 --fold-end 15
-    python run_joungzhang.py --merge-only
-"""
-
 import os
 import json
 import pickle
@@ -84,10 +62,6 @@ print(f"Loaded: {adata.shape}")
 
 cond_key = "perturbation" if "perturbation" in adata.obs.columns else "condition"
 
-# Joung-Zhang 2023 uses GFP as a control/filler component: GFP+GENE is a
-# single perturbation, GENE1+GENE2 (no GFP) is a double perturbation, and
-# a pure GFP condition (or the mean of all GFP+GENE cells when none exists)
-# provides the control baseline. This mirrors the original source exactly.
 CTRL_GENE = "GFP"
 ctrl_labels = ["ctrl", "control", "non-targeting"]
 
@@ -113,18 +87,15 @@ def parse_joungzhang_cond(cond):
     elif len(real) == 1 and (CTRL_GENE in parts or any(p in ctrl_labels for p in parts)):
         return "single", real
     elif len(real) == 1 and len(parts) == 1:
-        # bare single-gene label (no explicit GFP/ctrl component)
         return "single", real
     elif len(real) == 2 and CTRL_GENE not in parts:
         return "double", sorted(real)
     else:
         return "skip", real
 
-
-# Identify controls, singles, and doubles.
 ctrl_name = None
-singles, doubles = [], []          # lists of condition strings
-single_cond_by_gene = {}           # gene -> condition string
+singles, doubles = [], []          
+single_cond_by_gene = {}           
 single_gene_names = set()
 for c in adata.obs[cond_key].unique():
     ctype, genes = parse_joungzhang_cond(c)
@@ -139,8 +110,6 @@ for c in adata.obs[cond_key].unique():
 
 n_genes = adata.n_vars
 
-# Control mean: use the pure GFP control if present, otherwise the mean of
-# all GFP+GENE (single) cells as the baseline.
 if ctrl_name is not None and (adata.obs[cond_key] == ctrl_name).sum() > 0:
     ctrl_mask = adata.obs[cond_key] == ctrl_name
     ctrl_X = adata[ctrl_mask].X
@@ -173,18 +142,13 @@ def get_effect(cond_name):
     ).flatten() - ctrl_mean
 
 
-# AnnData-insertion-order eligible pairs (used to build each fold's validation
-# pool, matching the original's eligible.items() pre-shuffle order).
 eligible_anndata_order = [
     d for d in doubles if all(g in single_gene_names for g in cp_genes(d))
 ]
-# Fold iteration order is lexicographic by sorted gene tuple, matching the
-# original's enumerate(sorted(pair_effects.keys())) so fold_idx maps to the
-# same held-out pair (and thus the same shuffle/model seeds).
+
 eligible = sorted(eligible_anndata_order, key=lambda c: tuple(sorted(cp_genes(c))))
 print(f"Singles: {len(singles)}, Doubles: {len(doubles)}, Eligible: {len(eligible)}")
 
-# Resolve the requested fold shard after the eligible fold count is known.
 fold_start = max(0, args.fold_start)
 fold_end = len(eligible) if args.fold_end is None else min(args.fold_end, len(eligible))
 if fold_start >= fold_end and not args.merge_only:
@@ -223,8 +187,6 @@ if args.merge_only:
     merge_shard_records()
     raise SystemExit(0)
 
-# A full single-process run keeps the historical canonical path. Sharded runs
-# write separate files so concurrent GPU processes never overwrite each other.
 if fold_start == 0 and fold_end == len(eligible):
     records_path = "results/joungzhang/records.json"
 else:
@@ -244,7 +206,6 @@ print(
     f"resuming with {len(completed_folds)} completed folds."
 )
 
-# Precompute effects
 single_effects = {}
 for c in singles:
     eff = get_effect(c)
@@ -494,7 +455,7 @@ def compute_gv_scgpt_mc(model, ho_tensor, n_passes=5):
     """Gene-wise variance for scGPT via MC dropout (mean per-gene variance
     across n stochastic forward passes), matching the original."""
     try:
-        model.train()  # enable dropout
+        model.train()  
         mc_preds = []
         with torch.no_grad():
             for _ in range(n_passes):
@@ -563,7 +524,6 @@ if os.path.exists(os.path.join(SCGPT_DIR, "vocab.json")):
             mapped += 1
     print(f"  Mapped {mapped}/{n_pg} perturbation genes")
 
-    # Also map output genes for GEARS+scGPT initialization.
     gene_names_out = list(adata.var_names)
     gene2idx_output = {g: i for i, g in enumerate(gene_names_out)}
     scgpt_embs_out = np.zeros((n_genes, pretrained_emb.shape[1]), dtype=np.float32)
@@ -608,8 +568,6 @@ def build_gears_adata_joungzhang(adata_full, cond_key_local, held_out_cond,
         elif ctype == "double":
             cond_map[cs] = "+".join(sorted(cp_genes(cs)))
         else:
-            # 'skip' conditions (triples etc.) are removed entirely, matching
-            # the original: they must not enter GEARS training or validation.
             keep_mask[obs_vals == c] = False
             cond_map[cs] = cs
 
@@ -617,7 +575,6 @@ def build_gears_adata_joungzhang(adata_full, cond_key_local, held_out_cond,
     ac.obs["condition_name"] = ac.obs["condition"].copy()
     ac = ac[keep_mask].copy()
 
-    # Create pseudo-controls from single-gene cells if no ctrl cells exist
     cvals = ac.obs["condition"].astype(str).to_numpy()
     if not np.any(cvals == "ctrl"):
         single_idx = np.flatnonzero(
@@ -632,7 +589,6 @@ def build_gears_adata_joungzhang(adata_full, cond_key_local, held_out_cond,
             pseudo.obs_names = [f"pseudo_ctrl_{i}" for i in range(pseudo.n_obs)]
             ac = ad.concat([ac, pseudo], axis=0, join="inner")
 
-    # Subsample cells per condition
     rng = np.random.default_rng(seed)
     selected = []
     for cond in ac.obs["condition"].unique():
@@ -657,7 +613,6 @@ def build_gears_adata_joungzhang(adata_full, cond_key_local, held_out_cond,
 
 print(f"\nRunning fold shard [{fold_start}, {fold_end}) of {len(eligible)}-fold LOO CV")
 
-# Prepare shared GEARS dataset once (if available)
 if gears_available:
     try:
         gears_ds_name = f"joungzhang_gears_shared_c{GEARS_CELLS_PER_COND}"
@@ -665,8 +620,7 @@ if gears_available:
         os.makedirs(gears_ds_dir, exist_ok=True)
         pdata = PertData("./data")
         gears_h5ad = os.path.join(gears_ds_dir, "perturb_processed.h5ad")
-        # Multiple shards may start simultaneously. Serialize the one-time
-        # GEARS preprocessing step to avoid corrupting the shared cache.
+
         import fcntl
         lock_path = os.path.join(gears_ds_dir, ".prepare.lock")
         with open(lock_path, "w") as lock_file:
@@ -709,9 +663,6 @@ for fold_idx in range(fold_start, fold_end):
     add_pred = sum(single_effects[g] for g in ho_genes)
     top20 = np.argsort(np.abs(true_eff))[-20:]
 
-    # Validation: the pool is the ELIGIBLE double pairs (in AnnData order,
-    # matching the original's eligible.items()) minus the held-out pair.
-    # Shuffle with the fold index as seed, then hold out ~1/5 as validation.
     remaining_doubles = [c for c in eligible_anndata_order if c != held_out]
     np.random.seed(fold_idx)
     shuffled_doubles = list(remaining_doubles)
@@ -719,8 +670,6 @@ for fold_idx in range(fold_start, fold_end):
     n_val = max(1, len(shuffled_doubles) // 5)
     val_conds = shuffled_doubles[:n_val]
     train_conds = singles + shuffled_doubles[n_val:]
-    # Ridge and the kNN reference sets use ALL non-held-out conditions
-    # (singles + eligible doubles), i.e. train + val, matching the original.
     all_nonho_conds = singles + remaining_doubles
 
     record = {
@@ -730,7 +679,6 @@ for fold_idx in range(fold_start, fold_end):
         "top20_additive": float(np.mean(np.abs(add_pred[top20] - true_eff[top20]))),
     }
 
-    # Ridge (trained on ALL non-held-out conditions: singles + doubles)
     X_r, Y_r = [], []
     for c in all_nonho_conds:
         if c not in all_effects:
@@ -753,9 +701,7 @@ for fold_idx in range(fold_start, fold_end):
         record["ad_ridge"] = float(np.mean(np.abs(rp - add_pred)))
         record["pm_ridge"] = float(np.mean(np.abs(rp)))
         record["gv_ridge"] = float(np.var(rp))
-        # Ridge kNN: use Ridge coefficient columns as gene embeddings,
-        # pair embedding = sum of the two gene embeddings.
-        ridge_coef = ridge.coef_  # (n_genes_out, n_pert_genes)
+        ridge_coef = ridge.coef_  
 
         def ridge_pair_emb(genes):
             emb = np.zeros(n_genes)
@@ -947,8 +893,6 @@ for fold_idx in range(fold_start, fold_end):
 
     all_records.append(record)
 
-    # Save the shard immediately after every completed fold. If the process is
-    # interrupted during a fold, only that current fold is repeated on restart.
     all_records = sorted(all_records, key=lambda r: int(r.get("fold", -1)))
     tmp_path = records_path + ".tmp"
     with open(tmp_path, "w") as f:
@@ -1014,8 +958,6 @@ for name, key in model_keys:
     rho_pm = stats.spearmanr(pms, errs)[0]
     rho_gv = stats.spearmanr(gvs, errs)[0]
 
-    # kNN rho and kNN Abs@20%: MAE improvement after abstaining on the
-    # highest-risk 20% of predictions (per the paper's Abs20 definition).
     knn_valid = [r for r in valid if r.get(f"knn_{key}") is not None]
     if len(knn_valid) >= 5:
         knn = np.array([r[f"knn_{key}"] for r in knn_valid])

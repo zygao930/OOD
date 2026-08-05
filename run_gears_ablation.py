@@ -1,17 +1,3 @@
-"""
-GEARS architecture ablation (Table 5).
-
-Ablation configurations:
-    Full GEARS        Reuses the Table 1 full model (not retrained)
-    No GO graph       Remove GO similarity edges, retrain
-    No co-expression  Remove co-expression edges, retrain
-    No graphs         Remove both, retrain
-    Singles-only      Full GEARS trained without any combinatorial data
-
-Usage:
-    CUDA_VISIBLE_DEVICES=0 python run_gears_ablation.py
-"""
-
 import os
 import json
 import pickle
@@ -155,9 +141,6 @@ def ablate_graphs(gears_obj, remove_go=False, remove_coexpress=False):
             setattr(m, attr, torch.zeros_like(obj))
             changes.append(f"{attr}: -> zeros")
 
-    # Pass 2 (deferred correction): a 1D weight tensor may have been visited
-    # before its edge index, so it would have hit the zeros fallback above.
-    # Now that all edge counts are known, fix any such weight vector to ones.
     for attr, obj in tensor_info.items():
         is_go, is_coex = classify(attr)
         should_remove = (is_go and remove_go) or (is_coex and remove_coexpress)
@@ -220,7 +203,6 @@ for seed in SEEDS:
         model_dir = f"results/gears_ablation/{config_id}_seed{seed}"
 
         if config_id == "singles_only":
-            # Create split without combinatorial training data
             singles_split = {
                 "train": [c for c in split["train"]
                           if c == "ctrl" or len(pair_genes(c)) == 1],
@@ -243,8 +225,7 @@ for seed in SEEDS:
         elif config_id == "full" and (
                 os.path.exists(f"results/norman/gears_seed{seed}")
                 or os.path.exists(f"results/gears_seed{seed}")):
-            # Reuse the SAME full GEARS model from Table 1 rather than
-            # retraining, so Table 5's first row matches Table 1 exactly.
+
             full_dir = (f"results/norman/gears_seed{seed}"
                         if os.path.exists(f"results/norman/gears_seed{seed}")
                         else f"results/gears_seed{seed}")

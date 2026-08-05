@@ -1,18 +1,3 @@
-"""
-Signal combination and metric sensitivity analysis (Appendix D).
-
-Produces:
-    Table 11: Signal combination ablation. Each pair of signals is combined by
-              taking the arithmetic mean of their min-max normalized scores
-              (NOT a fitted logistic regression), matching the source code.
-    Table 12: Reliability signal AUROC across evaluation metrics
-
-Reads saved GEARS predictions. Requires GPU only if recomputing predictions.
-
-Usage:
-    CUDA_VISIBLE_DEVICES=0 python run_metric_sensitivity.py
-"""
-
 import os
 import json
 import pickle
@@ -54,8 +39,6 @@ n_genes_out = data["n_genes_out"]
 SEEDS = [42, 43, 44]
 records = []
 
-# Build a GEARS embedding-space kNN / Mahalanobis structure from training
-# pairs so the signal set matches Table 11 (which includes kNN + Mahalanobis).
 from sklearn.neighbors import NearestNeighbors
 from sklearn.covariance import EmpiricalCovariance
 from scipy.spatial.distance import mahalanobis as _mahalanobis
@@ -94,7 +77,6 @@ for seed in SEEDS:
     gears_model.model_initialize(hidden_size=64)
     gears_model.load_pretrained(gears_dir)
 
-    # Build GEARS-embedding kNN + Mahalanobis structures from training pairs.
     train_pairs = [c for c in split["train"]
                    if c != "ctrl" and len(pair_genes(c)) == 2]
     tr_embs = []
@@ -148,7 +130,7 @@ for seed in SEEDS:
             "pm": float(np.mean(np.abs(pred))),
             "gv": float(np.var(pred)),
         }
-        # kNN + Mahalanobis in GEARS embedding space.
+
         emb = _gears_pair_emb(gears_model, genes)
         if emb is not None and nn_seed is not None:
             rec["knn"] = float(nn_seed.kneighbors(emb.reshape(1, -1))[0].mean())
@@ -172,12 +154,10 @@ print("TABLE 11: Signal combination ablation")
 print("=" * 60)
 
 if records:
-    # Failure = top 25% error (75th percentile), matching the original.
     errors = np.array([r["error_full_mae"] for r in records])
     thresh = np.percentile(errors, 75)
     y_bin = (errors > thresh).astype(int)
 
-    # Full signal set including kNN and Mahalanobis (Table 11).
     signal_defs = [
         ("AD", "ad_l1"),
         ("PM", "pm"),
@@ -194,7 +174,6 @@ if records:
             return np.zeros_like(a)
         return (a - lo) / (hi - lo)
 
-    # Collect normalized signal arrays over records that have all needed keys.
     signal_arrays = {}
     for name, key in signal_defs:
         vals = [r.get(key) for r in records]
@@ -212,7 +191,6 @@ if records:
             ind_aurocs[name] = auroc
             print(f"  {name:<28} {auroc:>7.3f}")
 
-    # Pairwise combinations by AVERAGING normalized scores (not logistic reg).
     print(f"\n  Pairwise combinations (mean of normalized signals):")
     print(f"  {'Combination':<28} {'AUROC':>7}")
     print(f"  {'~' * 38}")
@@ -272,7 +250,7 @@ if records:
         s = np.array(vals, dtype=float)
         for mname, mkey in metrics:
             errs = np.array([r[mkey] for r in records])
-            thresh = np.percentile(errs, 75)   # top 25% error = failure
+            thresh = np.percentile(errs, 75)   
             yb = (errs > thresh).astype(int)
             if yb.sum() == 0 or yb.sum() == len(yb):
                 print(f" {'n/a':>10}", end="")
@@ -281,7 +259,6 @@ if records:
                 print(f" {auroc:>10.3f}", end="")
         print()
 
-    # Clean up large arrays from records before saving
     for r in records:
         for k in ["pred", "true", "additive", "top20_idx"]:
             if k in r:

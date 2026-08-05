@@ -1,14 +1,3 @@
-"""
-Shared data loading, split creation, and training utilities.
-
-Functions:
-    load_norman       Load Norman dataset and compute perturbation effects
-    create_splits     Create train/val/test splits for eligible pairs
-    train_pytorch     Generic training loop for MLP/Transformer/CPA
-    train_cpa         CPA-specific training loop with KL annealing
-    PertDatasetML     PyTorch Dataset for mean-effect perturbation prediction
-"""
-
 import os
 import pickle
 import warnings

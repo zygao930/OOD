@@ -1,6 +1,6 @@
 # Do Perturbation Predictors Learn Transferable Gene Interactions?
 
-Code for reproducing the experiments in *"Do Perturbation Predictors Learn Transferable Gene Interactions? Diagnosing Extrapolation Failures in Agentic Screening"*.
+Code for reproducing the experiments in *"Do Perturbation Predictors Learn Transferable Gene Interactions? Diagnosing Extrapolation Failures in Agentic Screening"* (NeurIPS 2026 ICBINB Workshop).
 
 ## Repository structure
 
@@ -12,7 +12,7 @@ reliability.py                Reliability signal computation (Table 8)
 prepare_data.py               Download datasets and create evaluation splits
 run_norman_baselines.py       Table 1 (Norman), Table 2, Table 9, Table 10
 run_gears_ablation.py         Table 5: GEARS graph ablations
-run_joungzhang.py             Table 1 (Joung-Zhang 2023), Table 3 (Joung-Zhang rows)
+run_joungzhang.py                Table 1 (Joung-Zhang 2023), Table 3 (Joung-Zhang rows)
 run_adamson.py                Table 3 (Adamson rows)
 run_fallback_analysis.py      Table 4: Reliability-aware fallback
 run_gene_level_analysis.py    Section 3.3: Gene-level analysis, Table 6
@@ -91,7 +91,7 @@ CUDA_VISIBLE_DEVICES=0 python run_adamson.py
 CUDA_VISIBLE_DEVICES=0 python run_gears_ablation.py
 ```
 
-### Analysis scripts
+### Analysis scripts (no GPU needed for most)
 
 ```bash
 # Table 4: Reliability-aware fallback

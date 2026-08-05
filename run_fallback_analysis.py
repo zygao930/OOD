@@ -1,20 +1,5 @@
-"""
-Reliability-aware fallback analysis (Table 4).
-
-Simulates an agentic screening setting where high-risk predictions are
-routed to the additive baseline. For each model and routing signal,
-sweeps thresholds and reports the best achievable MAE.
-
-No GPU needed. Reads saved results from run_norman_baselines.py and
-run_joungzhang.py.
-
-Usage:
-    python run_fallback_analysis.py
-"""
-
 import json
 import numpy as np
-
 
 def run_fallback(recs, model_name, dataset_name, error_key, add_key, signals):
     """Sweep routing thresholds and report best MAE for each signal."""

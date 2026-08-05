@@ -1,23 +1,3 @@
-"""
-Data preparation: download datasets and create evaluation splits.
-
-Datasets:
-    Norman (CRISPRa, K562)      Compositional OOD (Section 3, Appendix B)
-    Adamson (CRISPRi, K562)     Single-gene OOD (Table 3)
-    Joung-Zhang 2023              Second compositional OOD setting (Table 3)
-
-Splits:
-    Norman: 3 seeds (42,43,44), each partitioning 128 eligible pairs into
-            20% test / 20% val / 60% train.
-    Adamson: per seed, 20% of genes held out for test and a disjoint 10%
-             for validation; the three seeds together yield the paper's
-             48 single-gene held-out evaluations in aggregate.
-    Joung-Zhang 2023: leave-one-out cross-validation on eligible doubles.
-
-Usage:
-    python prepare_data.py
-"""
-
 import os
 import pickle
 import warnings
@@ -111,10 +91,6 @@ try:
     gene_list = sorted(single_genes_a)
     print(f"  Unique single-gene perturbations: {len(gene_list)}")
 
-    # Match the original: each seed holds out 20% of genes for test and a
-    # separate, disjoint 10% for validation. Across the three seeds this
-    # produces the paper's 48 held-out single-gene evaluations in aggregate
-    # (not 48 per seed). Validation genes never overlap train or test.
     all_conds = list(adata_a.obs["condition"].unique())
     for seed in [42, 43, 44]:
         rng = np.random.RandomState(seed)
@@ -145,7 +121,7 @@ try:
             "test_genes": sorted(test_genes),
             "val_genes": sorted(val_genes),
             "train_genes": sorted(train_genes),
-            "held_out_genes": sorted(test_genes),  # backward-compat alias
+            "held_out_genes": sorted(test_genes),  
         }
         path = f"results/splits/adamson_seed{seed}.pkl"
         with open(path, "wb") as f:

@@ -1,24 +1,3 @@
-"""
-Hypothesis testing for failure analysis (Section 4).
-
-Tests five hypotheses on BOTH Norman and Joung-Zhang 2023:
-    H1  True interactions are too small to learn
-    H2  Excess model error tracks true interaction magnitude
-    H3  Interaction effects lack learnable structure
-    H4  High-degree genes in co-expression graph get larger corrections
-    H5  AD works on full transcriptome but not on top-20 DE genes
-
-Each hypothesis is computed directly from the data and saved results;
-H4 computes a genuine co-expression degree proxy from the expression
-matrix (it is not a hard-coded number). Results for both datasets are
-written to results/hypothesis_analysis/results.json.
-
-No GPU needed.
-
-Usage:
-    python run_hypothesis_analysis.py
-"""
-
 import os
 import json
 import warnings
@@ -83,7 +62,6 @@ def parse_joungzhang(adata, cond_key):
     CTRL = "GFP"
     ctrl_labels = ["ctrl", "control", "non-targeting"]
 
-    # Determine control mean.
     ctrl_mean = None
     for lab in [CTRL] + ctrl_labels:
         m = _mean_expr(adata, cond_key, lab)
@@ -272,7 +250,6 @@ def run_h4(adata, singles, eligible, records, name):
     rng = np.random.default_rng(0)
     targets = rng.choice(valid_cols, min(500, len(valid_cols)), replace=False)
 
-    # Co-expression degree proxy: mean |correlation| to a random gene panel.
     print(f"  Computing co-expression degree proxy for {len(singles)} genes...")
     deg = {}
     for gene in singles:
@@ -303,7 +280,6 @@ def run_h4(adata, singles, eligible, records, name):
         print(f"  corr(degree, additive error): rho={rho_e:.3f} (p={p_e:.4f})")
         print(f"  corr(degree, true interaction): rho={rho_i:.3f} (p={p_i:.4f})")
 
-    # Model-specific: degree vs interaction correction (AD) and error.
     if records:
         model_keys = _model_keys(records, "ad_")
         for m in model_keys:

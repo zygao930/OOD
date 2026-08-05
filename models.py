@@ -1,13 +1,3 @@
-"""
-Model architectures for perturbation prediction.
-
-Models:
-    PertMLP           MLP with learned gene embeddings (Table 7)
-    PertTransformer   Transformer with positional embeddings (Table 7)
-    CompositionalPertVAE  CPA-style VAE with additive composition (Table 7)
-    ScGPTPertPredictor    Transformer initialized from scGPT embeddings (Table 7)
-"""
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -76,7 +66,6 @@ class PertTransformer(nn.Module):
         return self.head(pooled)
 
     def get_embedding(self, gene_idx):
-        """Return the pooled transformer embedding (for kNN signals)."""
         idx = gene_idx.clone()
         idx[idx < 0] = self.pad_idx
         embs = self.emb(idx) + self.pos_emb.unsqueeze(0)
