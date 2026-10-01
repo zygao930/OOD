@@ -1,4 +1,6 @@
-# Do Perturbation Predictors Learn Transferable Gene Interactions?
+# Do Perturbation Predictors Learn Gene Interactions? Diagnosing Extrapolation in Agentic Screening
+
+Accepted at the NeurIPS 2026 Workshop ML4Molecules: Agentic Systems for Molecular Sciences.
 
 ## Repository structure
 
